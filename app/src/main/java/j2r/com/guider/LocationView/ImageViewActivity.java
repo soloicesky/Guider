@@ -1,9 +1,11 @@
 package j2r.com.guider.LocationView;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
@@ -46,6 +48,8 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
     private static final String TAG = "IndoorAtlasExample";
 
     private static final int REQUEST_CODE_WRITE_EXTERNAL_STORAGE = 1;
+    private static final int REQUEST_CODE_ACCESS_COARSE_LOCATION = 2;
+    private final int CODE_PERMISSIONS = 3;
 
     // blue dot radius in meters
     private static final float dotRadius = 1.0f;
@@ -96,6 +100,7 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
         setContentView(R.layout.activity_image_view);
         // prevent the screen going to sleep while app is on foreground
         findViewById(android.R.id.content).setKeepScreenOn(true);
+//        ensurePermissions();
 
         mImageView = (BlueDotView) findViewById(R.id.imageView);
 
@@ -240,12 +245,62 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
 
 
     private void ensurePermissions() {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                    REQUEST_CODE_WRITE_EXTERNAL_STORAGE);
-        }
+
+        String[] neededPermissions = {
+                Manifest.permission.CHANGE_WIFI_STATE,
+                Manifest.permission.ACCESS_WIFI_STATE,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+        };
+
+        ActivityCompat.requestPermissions( this, neededPermissions, CODE_PERMISSIONS );
+
+//        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+//                != PackageManager.PERMISSION_GRANTED) {
+//            ActivityCompat.requestPermissions(this,
+//                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+//                    REQUEST_CODE_WRITE_EXTERNAL_STORAGE);
+//        }
+//
+//        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+//                != PackageManager.PERMISSION_GRANTED) {
+//
+//            // we don't have access to coarse locations, hence we have not access to wifi either
+//            // check if this requires explanation to user
+//            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+//                    Manifest.permission.ACCESS_COARSE_LOCATION)) {
+//
+//                new AlertDialog.Builder(this)
+//                        .setTitle(R.string.location_permission_request_title)
+//                        .setMessage(R.string.location_permission_request_rationale)
+//                        .setPositiveButton(R.string.permission_button_accept, new DialogInterface.OnClickListener() {
+//                            @Override
+//                            public void onClick(DialogInterface dialog, int which) {
+//                                Log.d(TAG, "request permissions");
+//                                ActivityCompat.requestPermissions(ImageViewActivity.this,
+//                                        new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
+//                                        REQUEST_CODE_ACCESS_COARSE_LOCATION);
+//                            }
+//                        })
+//                        .setNegativeButton(R.string.permission_button_deny, new DialogInterface.OnClickListener() {
+//                            @Override
+//                            public void onClick(DialogInterface dialog, int which) {
+//                                Toast.makeText(ImageViewActivity.this,
+//                                        R.string.location_permission_denied_message,
+//                                        Toast.LENGTH_LONG).show();
+//                            }
+//                        })
+//                        .show();
+//
+//            } else {
+//
+//                // ask user for permission
+//                ActivityCompat.requestPermissions(this,
+//                        new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
+//                        REQUEST_CODE_ACCESS_COARSE_LOCATION);
+//
+//            }
+//
+//        }
     }
 
     @Override
@@ -259,6 +314,22 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
                     Toast.makeText(this, R.string.storage_permission_denied_message,
                             Toast.LENGTH_LONG).show();
                     finish();
+                }
+                break;
+            case REQUEST_CODE_ACCESS_COARSE_LOCATION:
+
+                if (grantResults.length == 0
+                        || grantResults[0] == PackageManager.PERMISSION_DENIED) {
+                    Toast.makeText(this, R.string.location_permission_denied_message,
+                            Toast.LENGTH_LONG).show();
+                }
+                break;
+            case CODE_PERMISSIONS:
+
+                if (grantResults.length == 0
+                        || grantResults[0] == PackageManager.PERMISSION_DENIED) {
+                    Toast.makeText(this, R.string.location_permission_denied_message,
+                            Toast.LENGTH_LONG).show();
                 }
                 break;
         }
@@ -290,6 +361,8 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
 
     @Override
     public void onEnterRegion(IARegion iaRegion) {
+
+        Log.e(TAG, iaRegion.getId() + ":" + iaRegion.getName() + ":" + iaRegion.getId());
 
     }
 
