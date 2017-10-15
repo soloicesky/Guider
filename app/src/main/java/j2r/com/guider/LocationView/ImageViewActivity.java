@@ -36,20 +36,27 @@ import com.indooratlas.android.sdk.resources.IAResourceManager;
 import com.indooratlas.android.sdk.resources.IAResult;
 import com.indooratlas.android.sdk.resources.IAResultCallback;
 import com.indooratlas.android.sdk.resources.IATask;
+import com.wilddog.client.ChildEventListener;
+import com.wilddog.client.DataSnapshot;
+import com.wilddog.client.Wilddog;
+import com.wilddog.client.WilddogError;
 
 import java.io.File;
 import java.util.Locale;
+import java.util.Map;
 
 import j2r.com.guider.R;
 import j2r.com.guider.utils.ExampleUtils;
 
-public class ImageViewActivity extends FragmentActivity implements IALocationListener, IARegion.Listener{
+public class ImageViewActivity extends FragmentActivity implements IALocationListener, IARegion.Listener {
 
-    private static final String TAG = "IndoorAtlasExample";
+    private static final String TAG = "ImageViewActivity";
 
     private static final int REQUEST_CODE_WRITE_EXTERNAL_STORAGE = 1;
     private static final int REQUEST_CODE_ACCESS_COARSE_LOCATION = 2;
     private final int CODE_PERMISSIONS = 3;
+    private final double START_TOP = 10010.206;
+    private final double START_LEFT = 7682.794;
 
     // blue dot radius in meters
     private static final float dotRadius = 1.0f;
@@ -61,16 +68,62 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
     private BlueDotView mImageView;
     private long mDownloadId;
     private DownloadManager mDownloadManager;
+    private int currentFloor = 0;
+    private Wilddog ref = new Wilddog("https://yuanoook.wilddogio.com/");
 
     private IALocationListener mLocationListener = new IALocationListenerSupport() {
         @Override
         public void onLocationChanged(IALocation location) {
-            Log.d(TAG, "location is: " + location.getLatitude() + "," + location.getLongitude());
+//            Log.d(TAG, "location is: " + location.getLatitude() + "," + location.getLongitude());
+
+            Log.e(TAG, String.format(Locale.US, "location is: %f,%f, accuracy: %.2f, certainty: %.2f, floor level:%d",
+                    location.getLatitude(), location.getLongitude(), location.getAccuracy(),
+                    location.getFloorCertainty(), location.getFloorLevel()));
+
+            if (currentFloor != location.getFloorLevel()) {
+                switch (location.getFloorLevel()) {
+                    case 1:
+                        mImageView.setImage(ImageSource.resource(R.drawable.floor1));
+                        break;
+                    case 2:
+                        mImageView.setImage(ImageSource.resource(R.drawable.floor2));
+                        break;
+                }
+
+                currentFloor = location.getFloorLevel();
+            }
+
+
             if (mImageView != null && mImageView.isReady()) {
-                IALatLng latLng = new IALatLng(location.getLatitude(), location.getLongitude());
-                PointF point = mFloorPlan.coordinateToPoint(latLng);
-                mImageView.setDotCenter(point);
-                mImageView.postInvalidate();
+                if (mFloorPlan != null) {
+                    IALatLng latLng = new IALatLng(location.getLatitude(), location.getLongitude());
+                    Log.e(TAG, "onLocationChanged: floor plan is:" + mFloorPlan.toString());
+
+                    PointF point = mFloorPlan.coordinateToPoint(latLng);
+
+                    Log.e(TAG, "onLocationChanged: pintf"+ point.x + ":"+point.y);
+
+//                    point.set(20f, 25f);
+                    PointF fixPoint = new PointF();
+
+                    GCJPointer gcjPointer = new GCJPointer(location.getLatitude(), location.getLongitude());
+
+                    WGSPointer wgspinter =  gcjPointer.toExactWGSPointer();
+                    latLng = new IALatLng(wgspinter.getLatitude(), wgspinter.getLongitude());
+                    PointF point2 = mFloorPlan.coordinateToPoint(latLng);
+
+//                    Toast.makeText(mImageView.getContext(), "point("+point.x+","+point.y+")" +"point2("+point2.x+","+point2.y+")", Toast.LENGTH_LONG).show();
+                    Log.e(TAG, "onLocationChanged: pintf"+ point2.x + ":"+point2.y);
+
+                    mImageView.setDotCenter(point2);
+
+
+                    ref.child("x").setValue(""+point2.x);
+                    ref.child("y").setValue(""+point2.y);
+                    ref.child("floor").setValue(""+location.getFloorLevel());
+//                    mImageView.postInvalidate();
+                    mImageView.invalidate();
+                }
             }
         }
     };
@@ -103,6 +156,36 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
 //        ensurePermissions();
 
         mImageView = (BlueDotView) findViewById(R.id.imageView);
+        ref.addChildEventListener(new ChildEventListener() {
+            @Override
+            public void onChildAdded(DataSnapshot dataSnapshot, String s) {
+
+            }
+
+            @Override
+            public void onChildChanged(DataSnapshot dataSnapshot, String s) {
+//                Map<String, Object> newPost = (Map<String, Object>) dataSnapshot.getValue();
+//                System.out.println("Author: " + dataSnapshot.child("cmd").getValue());
+                if (dataSnapshot.getKey().equals("cmd")) {
+                    Toast.makeText(ImageViewActivity.this, dataSnapshot.getValue().toString(), Toast.LENGTH_LONG).show();
+                }
+            }
+
+            @Override
+            public void onChildRemoved(DataSnapshot dataSnapshot) {
+
+            }
+
+            @Override
+            public void onChildMoved(DataSnapshot dataSnapshot, String s) {
+
+            }
+
+            @Override
+            public void onCancelled(WilddogError wilddogError) {
+
+            }
+        });
 
         mDownloadManager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
         mIALocationManager = IALocationManager.create(this);
@@ -132,7 +215,7 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
     @Override
     protected void onResume() {
         super.onResume();
-        ensurePermissions();
+//        ensurePermissions();
         // starts receiving location updates
         mIALocationManager.requestLocationUpdates(IALocationRequest.create(), mLocationListener);
         mIALocationManager.registerRegionListener(mRegionListener);
@@ -147,12 +230,12 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
         unregisterReceiver(onComplete);
     }
 
-    /**
-     * Methods for fetching floor plan data and bitmap image.
-     * Method {@link #fetchFloorPlan(String id)} fetches floor plan data including URL to bitmap
-     */
+//    /**
+//     * Methods for fetching floor plan data and bitmap image.
+//     * Method {@link #fetchFloorPlan(String id)} fetches floor plan data including URL to bitmap
+//     */
 
-     /*  Broadcast receiver for floor plan image download */
+    /*  Broadcast receiver for floor plan image download */
     private BroadcastReceiver onComplete = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -200,28 +283,28 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
                     Log.d(TAG, "fetch floor plan result:" + result);
                     if (result.isSuccess() && result.getResult() != null) {
                         mFloorPlan = result.getResult();
-                        String fileName = mFloorPlan.getId() + ".img";
-                        String filePath = Environment.getExternalStorageDirectory() + "/"
-                                + Environment.DIRECTORY_DOWNLOADS + "/" + fileName;
-                        File file = new File(filePath);
-                        if (!file.exists()) {
-                            DownloadManager.Request request =
-                                    new DownloadManager.Request(Uri.parse(mFloorPlan.getUrl()));
-                            request.setDescription("IndoorAtlas floor plan");
-                            request.setTitle("Floor plan");
-                            // requires android 3.2 or later to compile
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-                                request.allowScanningByMediaScanner();
-                                request.setNotificationVisibility(DownloadManager.
-                                        Request.VISIBILITY_HIDDEN);
-                            }
-                            request.setDestinationInExternalPublicDir(Environment.
-                                    DIRECTORY_DOWNLOADS, fileName);
-
-                            mDownloadId = mDownloadManager.enqueue(request);
-                        } else {
-                            showFloorPlanImage(filePath);
-                        }
+//                        String fileName = mFloorPlan.getId() + ".img";
+//                        String filePath = Environment.getExternalStorageDirectory() + "/"
+//                                + Environment.DIRECTORY_DOWNLOADS + "/" + fileName;
+//                        File file = new File(filePath);
+//                        if (!file.exists()) {
+//                            DownloadManager.Request request =
+//                                    new DownloadManager.Request(Uri.parse(mFloorPlan.getUrl()));
+//                            request.setDescription("IndoorAtlas floor plan");
+//                            request.setTitle("Floor plan");
+//                            // requires android 3.2 or later to compile
+//                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+//                                request.allowScanningByMediaScanner();
+//                                request.setNotificationVisibility(DownloadManager.
+//                                        Request.VISIBILITY_HIDDEN);
+//                            }
+//                            request.setDestinationInExternalPublicDir(Environment.
+//                                    DIRECTORY_DOWNLOADS, fileName);
+//
+//                            mDownloadId = mDownloadManager.enqueue(request);
+//                        } else {
+//                            showFloorPlanImage(filePath);
+//                        }
                     } else {
                         // do something with error
                         if (!asyncResult.isCancelled()) {
@@ -246,61 +329,61 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
 
     private void ensurePermissions() {
 
-        String[] neededPermissions = {
-                Manifest.permission.CHANGE_WIFI_STATE,
-                Manifest.permission.ACCESS_WIFI_STATE,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-        };
+//        String[] neededPermissions = {
+//                Manifest.permission.CHANGE_WIFI_STATE,
+//                Manifest.permission.ACCESS_WIFI_STATE,
+//                Manifest.permission.ACCESS_COARSE_LOCATION
+//        };
+//
+//        ActivityCompat.requestPermissions( this, neededPermissions, CODE_PERMISSIONS );
 
-        ActivityCompat.requestPermissions( this, neededPermissions, CODE_PERMISSIONS );
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                    REQUEST_CODE_WRITE_EXTERNAL_STORAGE);
+        }
 
-//        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-//                != PackageManager.PERMISSION_GRANTED) {
-//            ActivityCompat.requestPermissions(this,
-//                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
-//                    REQUEST_CODE_WRITE_EXTERNAL_STORAGE);
-//        }
-//
-//        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
-//                != PackageManager.PERMISSION_GRANTED) {
-//
-//            // we don't have access to coarse locations, hence we have not access to wifi either
-//            // check if this requires explanation to user
-//            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-//                    Manifest.permission.ACCESS_COARSE_LOCATION)) {
-//
-//                new AlertDialog.Builder(this)
-//                        .setTitle(R.string.location_permission_request_title)
-//                        .setMessage(R.string.location_permission_request_rationale)
-//                        .setPositiveButton(R.string.permission_button_accept, new DialogInterface.OnClickListener() {
-//                            @Override
-//                            public void onClick(DialogInterface dialog, int which) {
-//                                Log.d(TAG, "request permissions");
-//                                ActivityCompat.requestPermissions(ImageViewActivity.this,
-//                                        new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
-//                                        REQUEST_CODE_ACCESS_COARSE_LOCATION);
-//                            }
-//                        })
-//                        .setNegativeButton(R.string.permission_button_deny, new DialogInterface.OnClickListener() {
-//                            @Override
-//                            public void onClick(DialogInterface dialog, int which) {
-//                                Toast.makeText(ImageViewActivity.this,
-//                                        R.string.location_permission_denied_message,
-//                                        Toast.LENGTH_LONG).show();
-//                            }
-//                        })
-//                        .show();
-//
-//            } else {
-//
-//                // ask user for permission
-//                ActivityCompat.requestPermissions(this,
-//                        new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
-//                        REQUEST_CODE_ACCESS_COARSE_LOCATION);
-//
-//            }
-//
-//        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            // we don't have access to coarse locations, hence we have not access to wifi either
+            // check if this requires explanation to user
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.ACCESS_COARSE_LOCATION)) {
+
+                new AlertDialog.Builder(this)
+                        .setTitle(R.string.location_permission_request_title)
+                        .setMessage(R.string.location_permission_request_rationale)
+                        .setPositiveButton(R.string.permission_button_accept, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                Log.d(TAG, "request permissions");
+                                ActivityCompat.requestPermissions(ImageViewActivity.this,
+                                        new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
+                                        REQUEST_CODE_ACCESS_COARSE_LOCATION);
+                            }
+                        })
+                        .setNegativeButton(R.string.permission_button_deny, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                Toast.makeText(ImageViewActivity.this,
+                                        R.string.location_permission_denied_message,
+                                        Toast.LENGTH_LONG).show();
+                            }
+                        })
+                        .show();
+
+            } else {
+
+                // ask user for permission
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
+                        REQUEST_CODE_ACCESS_COARSE_LOCATION);
+
+            }
+
+        }
     }
 
     @Override
@@ -343,8 +426,7 @@ public class ImageViewActivity extends FragmentActivity implements IALocationLis
                 location.getLatitude(), location.getLongitude(), location.getAccuracy(),
                 location.getFloorCertainty(), location.getFloorLevel()));
 
-        switch(location.getFloorLevel())
-        {
+        switch (location.getFloorLevel()) {
             case 1:
                 mImageView.setBackgroundResource(R.drawable.floor1);
                 break;
